@@ -1,0 +1,6 @@
+recursiveDir=.
+include=*.py
+exclude=.git,.venv,venv,build,dist
+tests=tests
+skips=
+severity=medium
