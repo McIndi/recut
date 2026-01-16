@@ -106,9 +106,9 @@ def main(args: list[str] | None = None) -> int:
     flags = re.IGNORECASE if parsed_args.ignore_case else 0
     # Add word boundaries (\b in regex) if the --word option is specified
     pattern = (
-        r"\b" + re.escape(parsed_args.pattern) + r"\b"
+        r"\b" + parsed_args.pattern + r"\b"
         if parsed_args.word
-        else re.escape(parsed_args.pattern)
+        else parsed_args.pattern
     )
     try:
         regex = re.compile(pattern, flags)
