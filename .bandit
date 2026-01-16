@@ -1,6 +1,5 @@
-recursiveDir=.
-include=*.py
-exclude=.git,.venv,venv,build,dist
-tests=tests
-skips=
-severity=medium
+[bandit]
+recursiveDir = .
+include = *.py
+exclude = .git,.venv,venv,build,dist
+severity = medium
