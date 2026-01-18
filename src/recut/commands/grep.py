@@ -48,7 +48,30 @@ def create_parser():
         help="Match whole words only.",
     )
     parser.add_argument(
-        "-v",
+        "-H",
+        "--with-filename",
+        action="store_true",
+        help="Print the filename with each match.",
+    )
+    parser.add_argument(
+        "-n",
+        "--line-number",
+        action="store_true",
+        help="Print the line number with each match.",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress normal output; return exit code only.",
+    )
+    parser.add_argument(
+        "-l",
+        "--files-with-matches",
+        action="store_true",
+        help="Print only the filenames containing matches.",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
@@ -119,6 +142,8 @@ def main(args: list[str] | None = None) -> int:
     # Read input and search for the pattern
     matches = 0
     targets = _expand_inputs(parsed_args.input_files)
+    files_with_matches: Set[str] = set()
+    
     with ExitStack() as stack:
         for target in targets:
             try:
@@ -132,11 +157,40 @@ def main(args: list[str] | None = None) -> int:
                 log.error("Error opening input file %s: %s", target, e)
                 return RETURN_CODES["ERROR"]
 
+            line_number = 0
             for line in input_stream:
+                line_number += 1
                 if regex.search(line):
-                    # Output matching line
                     matches += 1
-                    print(line.strip())
+                    
+                    # Track files with matches for -l flag
+                    if parsed_args.files_with_matches:
+                        files_with_matches.add(target)
+                    
+                    # Output matching line (unless in quiet or files-with-matches mode)
+                    if not parsed_args.quiet and not parsed_args.files_with_matches:
+                        output = line.strip()
+                        
+                        # Prepend filename if -H is set
+                        if parsed_args.with_filename:
+                            output = f"{target}:{output}"
+                        
+                        # Prepend line number if -n is set
+                        if parsed_args.line_number:
+                            output = f"{line_number}:{output}"
+                        
+                        # Handle formatting with both -H and -n
+                        if parsed_args.with_filename and parsed_args.line_number:
+                            output = f"{target}:{line_number}:{line.strip()}"
+                        
+                        print(output)
+
+    # Output filenames if -l flag was set
+    if parsed_args.files_with_matches:
+        for filename in sorted(files_with_matches):
+            print(filename)
+        if files_with_matches:
+            matches = len(files_with_matches)
 
     # Return non-zero code if no matches were found (for scripting purposes)
     if matches == 0:
