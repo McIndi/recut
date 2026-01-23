@@ -238,3 +238,25 @@ def test_main_quiet_and_files_with_matches_conflict(tmp_path: Path):
     # Both flags together - quiet should suppress output
     code = main(["needle", "-q", "-l", str(file_path)])
     assert code == RETURN_CODES["SUCCESS"]
+
+
+def test_line_numbers_reset_for_each_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    """Test that line numbers reset to 1 for each new file when using -n flag."""
+    # Create two files with matches at different positions
+    file1 = write_lines(tmp_path, "file1.txt", ["alpha", "needle", "beta", "needle"])
+    file2 = write_lines(tmp_path, "file2.txt", ["gamma", "needle", "delta"])
+    
+    code = main(["needle", "-H", "-n", str(file1), str(file2)])
+    out = capsys.readouterr().out.strip().splitlines()
+    
+    assert code == RETURN_CODES["SUCCESS"]
+    assert len(out) == 3
+    
+    # file1.txt should have matches at lines 2 and 4
+    assert f"{file1}:2:needle" in out
+    assert f"{file1}:4:needle" in out
+    
+    # file2.txt should have a match at line 2 (not line 6!)
+    # This is the critical assertion - if line numbers don't reset,
+    # this would be line 6 (4 lines from file1 + 2 lines into file2)
+    assert f"{file2}:2:needle" in out

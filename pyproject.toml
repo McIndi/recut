@@ -33,6 +33,7 @@ dependencies = []
 
 [project.scripts]
 greppy = "recut.commands.grep:main"
+cutty = "recut.commands.cut:main"
 
 [project.optional-dependencies]
 dev = [

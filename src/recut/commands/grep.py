@@ -13,9 +13,10 @@ import logging
 import sys
 import re
 from glob import glob
-from contextlib import ExitStack
 from collections import deque
-from typing import List, Set, TextIO
+from typing import List, Set
+
+from recut.core import create_file_based_parser, file_input_handler
 
 RETURN_CODES = {
     "SUCCESS": 0,
@@ -27,14 +28,17 @@ RETURN_CODES = {
 
 def create_parser():
     """Create the argument parser for the grep command."""
-    parser = argparse.ArgumentParser(
-        description="Search for PATTERN in input data and output matching lines.",
+    parser = create_file_based_parser(
+        description=__doc__,
     )
+    
+    # Add positional argument for pattern
     parser.add_argument(
         "pattern",
         type=str,
         help="The pattern to search for in the input data.",
     )
+    
     parser.add_argument(
         "-i",
         "--ignore-case",
@@ -71,20 +75,15 @@ def create_parser():
         action="store_true",
         help="Print only the filenames containing matches.",
     )
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default="INFO",
-        help="Set the logging level.",
-    )
+    
+    # Input files
     parser.add_argument(
         "input_files",
         nargs="*",
         default=None,
-        help=(
-            "One or more input files or glob patterns (default: standard input). Use '-' for stdin."
-        ),
+        help="Input files (default: standard input). Use '-' for stdin.",
     )
+    
     return parser
 
 
@@ -143,47 +142,45 @@ def main(args: list[str] | None = None) -> int:
     matches = 0
     targets = _expand_inputs(parsed_args.input_files)
     files_with_matches: Set[str] = set()
+    line_number = 0
+    current_source = None
     
-    with ExitStack() as stack:
-        for target in targets:
-            try:
-                if target == "-":
-                    # Use stdin without closing it
-                    input_stream: TextIO = sys.stdin
-                else:
-                    # Open the specified input file and ensure closure
-                    input_stream = stack.enter_context(open(target, "r"))
-            except IOError as e:
-                log.error("Error opening input file %s: %s", target, e)
-                return RETURN_CODES["ERROR"]
-
-            line_number = 0
-            for line in input_stream:
-                line_number += 1
-                if regex.search(line):
-                    matches += 1
+    try:
+        for line, source in file_input_handler(targets):
+            # Reset line number when we move to a new file
+            if source != current_source:
+                current_source = source
+                line_number = 0
+            
+            line_number += 1
+            if regex.search(line):
+                matches += 1
+                
+                # Track files with matches for -l flag
+                if parsed_args.files_with_matches:
+                    files_with_matches.add(source)
+                
+                # Output matching line (unless in quiet or files-with-matches mode)
+                if not parsed_args.quiet and not parsed_args.files_with_matches:
+                    output = line.strip()
                     
-                    # Track files with matches for -l flag
-                    if parsed_args.files_with_matches:
-                        files_with_matches.add(target)
+                    # Prepend filename if -H is set
+                    if parsed_args.with_filename:
+                        output = f"{source}:{output}"
                     
-                    # Output matching line (unless in quiet or files-with-matches mode)
-                    if not parsed_args.quiet and not parsed_args.files_with_matches:
-                        output = line.strip()
-                        
-                        # Prepend filename if -H is set
-                        if parsed_args.with_filename:
-                            output = f"{target}:{output}"
-                        
-                        # Prepend line number if -n is set
-                        if parsed_args.line_number:
-                            output = f"{line_number}:{output}"
-                        
-                        # Handle formatting with both -H and -n
-                        if parsed_args.with_filename and parsed_args.line_number:
-                            output = f"{target}:{line_number}:{line.strip()}"
-                        
-                        print(output)
+                    # Prepend line number if -n is set
+                    if parsed_args.line_number:
+                        output = f"{line_number}:{output}"
+                    
+                    # Handle formatting with both -H and -n
+                    if parsed_args.with_filename and parsed_args.line_number:
+                        output = f"{source}:{line_number}:{line.strip()}"
+                    
+                    print(output)
+    
+    except IOError as e:
+        log.error("%s", e)
+        return RETURN_CODES["ERROR"]
 
     # Output filenames if -l flag was set
     if parsed_args.files_with_matches:
