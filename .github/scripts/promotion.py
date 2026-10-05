@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Validate McIndi/recut promotion pull request branch pairs."""
+"""Validate McIndi/recut promotion pull request branch pairs.
+
+Regression check only: it runs from the candidate checkout, so a candidate can
+alter it. It is not independent enforcement of the promotion ladder.
+"""
 
 from __future__ import annotations
 

@@ -65,7 +65,7 @@ def create_parser():
         "-q",
         "--quiet",
         action="store_true",
-        help="Suppress normal output; return exit code only.",
+        help="Suppress matching-line output; exit code reflects match/no-match.",
     )
     parser.add_argument(
         "-l",

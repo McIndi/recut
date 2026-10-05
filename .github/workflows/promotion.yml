@@ -1,4 +1,8 @@
 name: Promotion policy
+# Regression check only. This workflow and .github/scripts/promotion.py come from
+# the PR being evaluated, so a PR can change them: this is NOT independent
+# enforcement of the branch ladder. Enforcement requires the normal protected-PR
+# boundary plus a separate, independently trusted gate (see README).
 on:
   pull_request:
 permissions:

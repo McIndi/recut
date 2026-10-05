@@ -137,17 +137,21 @@ def test_greppy_pipe_to_cutty_subprocess(
     data = tmp_path / "records.txt"
     data.write_text("keep\tcol2\nskip\tcol2\n")
 
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     grep = subprocess.Popen(
         [str(installed_cli["greppy"]), "keep", str(data)],
         stdout=subprocess.PIPE,
         text=True,
-        env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+        cwd=tmp_path,
+        env=env,
     )
     cut = subprocess.run(
         [str(installed_cli["cutty"]), "-f", "2"],
         stdin=grep.stdout,
         capture_output=True,
         text=True,
+        cwd=tmp_path,
+        env=env,
         check=False,
     )
     assert grep.wait() == 0
@@ -175,3 +179,21 @@ def test_cutty_invalid_arguments_exit_code(installed_cli: dict[str, Path]) -> No
     for args in ([], ["-f", "0"], ["-f", "1", "-c", "1"]):
         result = run_cli(installed_cli["cutty"], args, input_text="a\n")
         assert result.returncode == 1, args
+
+
+def test_output_file_help_does_not_claim_it_works(
+    installed_cli: dict[str, Path], tmp_path: Path
+) -> None:
+    for name in ("greppy", "cutty"):
+        help_text = " ".join(run_cli(installed_cli[name], ["--help"]).stdout.split())
+        assert "currently ignored" in help_text, name
+
+    target = tmp_path / "out.txt"
+    result = run_cli(
+        installed_cli["cutty"],
+        ["-f", "1", "--output-file", str(target)],
+        input_text="b\n",
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "b"
+    assert not target.exists()

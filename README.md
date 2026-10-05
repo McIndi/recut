@@ -36,7 +36,7 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-After installation, `greppy` and `cutty` are available on your `PATH`. Behavior described below is what the automated test suite exercises on Linux. CI runs Python 3.12; the package declares `requires-python >= 3.10`, but other versions are not part of the verified test matrix. This is not a claim of full POSIX or GNU compatibility on every platform. Neither command implements `--version` yet (deferred); use `pip show recut` for the installed version.
+After installation, `greppy` and `cutty` are available on your `PATH`. Behavior described below is what the automated test suite exercises on Linux. CI runs Python 3.12; the package declares `requires-python >= 3.10`, but other versions are not part of the verified test matrix. This is not a claim of full POSIX or GNU compatibility on every platform. Neither command implements `--version` yet (deferred); use `python -m pip show recut` for the installed version.
 
 ## Running Tests
 
@@ -81,7 +81,7 @@ Search input lines for a regular expression pattern.
 | `-n`, `--line-number` | Prefix each match with the line number |
 | `-q`, `--quiet` | Suppress matching lines; exit code still reflects match/no-match |
 | `-l`, `--files-with-matches` | Print only file names that contain a match |
-| `--output-file` | Parsed for API consistency; output still goes to stdout in current releases |
+| `--output-file` | Reserved and currently ignored: it is accepted but no file is written; output always goes to stdout |
 | `--log-level` | Logging level (`DEBUG` … `CRITICAL`, default `INFO`) |
 
 **Input:** If no files are given, standard input is read. Use `-` explicitly for stdin in a file list. Glob patterns in file arguments are expanded.
@@ -113,11 +113,11 @@ Either `-f`/`--field` or `-c`/`--characters` is required (mutually exclusive).
 
 | Option | Description |
 |--------|-------------|
-| `-f`, `--field SPEC` | Comma-separated fields or ranges (1-based), e.g. `1,3,5-7` or `3-` for open-ended |
+| `-f`, `--field SPEC` | Comma-separated fields or ranges (1-based), e.g. `1,3,5-7`, or `3-` as the entire spec for an open-ended range (see limitations) |
 | `-c`, `--characters SPEC` | Comma-separated character positions or ranges (1-based) |
 | `-d`, `--delimiter` | Field delimiter (default: tab) |
 | `-s`, `--only-delimited` | In field mode, skip lines that do not contain the delimiter |
-| `--output-file` | Parsed for API consistency; output still goes to stdout in current releases |
+| `--output-file` | Reserved and currently ignored: it is accepted but no file is written; output always goes to stdout |
 | `--log-level` | Logging level (`DEBUG` … `CRITICAL`, default `INFO`) |
 
 **Input:** If no files are given, standard input is read.
@@ -145,6 +145,17 @@ Installed entrypoints compose in shell pipelines like other line-oriented tools:
 ```bash
 greppy pattern file.txt | cutty -f 2
 ```
+
+### Promotion policy and enforcement boundary
+
+`.github/workflows/promotion.yml` and `.github/scripts/promotion.py` encode the intended ladder (`feature/*`/`fix/*` → `dev` → `qa` → `prod` → `main`, same repository only) and are tested, but they belong to the pull request they evaluate, so a PR can change them. They are a regression check, **not** independent enforcement. Real enforcement relies on the normal protected-PR boundary (required reviews and required checks) plus a separately trusted gate, owned outside this candidate, that runs the canonical policy and posts its own check before merge. That gate is not part of this repository yet.
+
+### Known limitations
+
+- **Mixed open-ended ranges are not supported.** Use `N-` only as the whole `-f` spec (for example `-f 3-`). A mixed list such as `-f 1,3-` selects the fields between the listed numbers too (field 2 is included), and tokens after an open-ended range (for example the `0` in `-f 3-,0`) are not validated. `-c` has the same behavior. These are unfixed bugs, not supported syntax.
+- A pipeline's exit status is the last command's. To see an upstream greppy status (3 no match, 2 usage/regex, 1 error), use `set -o pipefail`; recut does not claim GNU exit-code parity.
+- `greppy` strips leading and trailing whitespace from matching lines. In field mode, `cutty` treats a line without the delimiter as one field (GNU `cut` passes it through).
+- `--output-file` is ignored (see the option tables).
 
 ## Blog Series
 

@@ -69,9 +69,14 @@ def create_parser():
 
 
 def parse_field_spec(spec: str) -> tuple[List[int], bool]:
-    """Parse a field spec such as '1,3,5-7,10-' into 1-based field indices.
+    """Parse a field spec such as '1,3,5-7' or '3-' into 1-based field indices.
 
     Returns (field_indices, has_open_ended_range).
+
+    Known limitation: an open-ended range ('N-') is only reliable as the
+    whole spec. Mixed lists such as '1,3-' return early, so the fields between
+    the listed numbers are selected too, and tokens after the open-ended range
+    are not validated.
     """
     fields: set[int] = set()
     parts = spec.split(",")

@@ -38,7 +38,7 @@ def create_file_based_parser(
         "--output-file",
         type=str,
         default=None,
-        help="Output file (default: standard output).",
+        help="Reserved; currently ignored. Output always goes to standard output.",
     )
     parser.add_argument(
         "--log-level",
