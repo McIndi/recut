@@ -39,9 +39,7 @@ def create_parser():
         "-c",
         "--characters",
         type=str,
-        help=(
-            "Extract character positions (comma-separated or ranges like 1,3,5-7)"
-        ),
+        help=("Extract character positions (comma-separated or ranges like 1,3,5-7)"),
     )
 
     # Delimiter and options
@@ -75,7 +73,7 @@ def parse_field_spec(spec: str) -> tuple[List[int], bool]:
 
     Returns (field_indices, has_open_ended_range).
     """
-    fields = set()
+    fields: set[int] = set()
     parts = spec.split(",")
     has_open_ended = False
 

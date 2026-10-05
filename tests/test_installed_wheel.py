@@ -153,3 +153,25 @@ def test_greppy_pipe_to_cutty_subprocess(
     assert grep.wait() == 0
     assert cut.returncode == 0
     assert cut.stdout.strip() == "col2"
+
+
+def test_greppy_usage_error_exit_code(installed_cli: dict[str, Path]) -> None:
+    missing_pattern = run_cli(installed_cli["greppy"], [])
+    assert missing_pattern.returncode == 2
+    assert "usage:" in missing_pattern.stderr
+
+    unknown_option = run_cli(installed_cli["greppy"], ["--bogus", "x"])
+    assert unknown_option.returncode == 2
+
+
+def test_missing_input_file_exit_code(installed_cli: dict[str, Path]) -> None:
+    for name, args in (("greppy", ["x"]), ("cutty", ["-f", "1"])):
+        result = run_cli(installed_cli[name], [*args, "/nonexistent/recut-input"])
+        assert result.returncode == 1, name
+        assert "ERROR" in result.stderr
+
+
+def test_cutty_invalid_arguments_exit_code(installed_cli: dict[str, Path]) -> None:
+    for args in ([], ["-f", "0"], ["-f", "1", "-c", "1"]):
+        result = run_cli(installed_cli["cutty"], args, input_text="a\n")
+        assert result.returncode == 1, args

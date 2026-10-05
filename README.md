@@ -36,7 +36,7 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-After installation, `greppy` and `cutty` are available on your `PATH`. Behavior described below is what the automated test suite exercises on Linux with Python 3.10+; it is not a claim of full POSIX or GNU compatibility on every platform.
+After installation, `greppy` and `cutty` are available on your `PATH`. Behavior described below is what the automated test suite exercises on Linux. CI runs Python 3.12; the package declares `requires-python >= 3.10`, but other versions are not part of the verified test matrix. This is not a claim of full POSIX or GNU compatibility on every platform. Neither command implements `--version` yet (deferred); use `pip show recut` for the installed version.
 
 ## Running Tests
 
@@ -92,7 +92,7 @@ Search input lines for a regular expression pattern.
 |------|---------|
 | `0` | At least one match |
 | `1` | I/O or other runtime error |
-| `2` | Invalid regular expression |
+| `2` | Invalid regular expression, or command-line usage error (missing pattern, unknown option) |
 | `3` | No matches |
 
 **Examples:**
