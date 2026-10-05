@@ -1,19 +1,17 @@
 """grep.py implements the 'grep' command for the recut tool.
 
-This command searches for a specified pattern in the input data and outputs lines that match the pattern.
+Search input for a pattern and print matching lines.
 
-It supports options for case sensitivity and whole word matching.
+It supports case sensitivity and whole-word matching options.
 
 Usage:
     grep.py [OPTIONS] PATTERN
 """
 
-import argparse
 import logging
-import sys
 import re
+import sys
 from glob import glob
-from collections import deque
 from typing import List, Set
 
 from recut.core import create_file_based_parser, file_input_handler
@@ -31,14 +29,14 @@ def create_parser():
     parser = create_file_based_parser(
         description=__doc__,
     )
-    
+
     # Add positional argument for pattern
     parser.add_argument(
         "pattern",
         type=str,
         help="The pattern to search for in the input data.",
     )
-    
+
     parser.add_argument(
         "-i",
         "--ignore-case",
@@ -75,7 +73,7 @@ def create_parser():
         action="store_true",
         help="Print only the filenames containing matches.",
     )
-    
+
     # Input files
     parser.add_argument(
         "input_files",
@@ -83,7 +81,7 @@ def create_parser():
         default=None,
         help="Input files (default: standard input). Use '-' for stdin.",
     )
-    
+
     return parser
 
 
@@ -107,7 +105,7 @@ def _expand_inputs(inputs: list[str] | None) -> List[str]:
     return expanded
 
 
-def main(args: list[str] | None = None) -> int:
+def main(args: list[str] | None = None) -> int:  # noqa: C901
     """Main function to execute the grep command."""
     parser = create_parser()
     if args is None:
@@ -128,9 +126,7 @@ def main(args: list[str] | None = None) -> int:
     flags = re.IGNORECASE if parsed_args.ignore_case else 0
     # Add word boundaries (\b in regex) if the --word option is specified
     pattern = (
-        r"\b" + parsed_args.pattern + r"\b"
-        if parsed_args.word
-        else parsed_args.pattern
+        r"\b" + parsed_args.pattern + r"\b" if parsed_args.word else parsed_args.pattern
     )
     try:
         regex = re.compile(pattern, flags)
@@ -144,40 +140,40 @@ def main(args: list[str] | None = None) -> int:
     files_with_matches: Set[str] = set()
     line_number = 0
     current_source = None
-    
+
     try:
         for line, source in file_input_handler(targets):
             # Reset line number when we move to a new file
             if source != current_source:
                 current_source = source
                 line_number = 0
-            
+
             line_number += 1
             if regex.search(line):
                 matches += 1
-                
+
                 # Track files with matches for -l flag
                 if parsed_args.files_with_matches:
                     files_with_matches.add(source)
-                
+
                 # Output matching line (unless in quiet or files-with-matches mode)
                 if not parsed_args.quiet and not parsed_args.files_with_matches:
                     output = line.strip()
-                    
+
                     # Prepend filename if -H is set
                     if parsed_args.with_filename:
                         output = f"{source}:{output}"
-                    
+
                     # Prepend line number if -n is set
                     if parsed_args.line_number:
                         output = f"{line_number}:{output}"
-                    
+
                     # Handle formatting with both -H and -n
                     if parsed_args.with_filename and parsed_args.line_number:
                         output = f"{source}:{line_number}:{line.strip()}"
-                    
+
                     print(output)
-    
+
     except IOError as e:
         log.error("%s", e)
         return RETURN_CODES["ERROR"]

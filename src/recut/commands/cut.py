@@ -1,14 +1,13 @@
 """cut.py implements the 'cut' command for the recut tool.
 
-This command extracts columns or characters from input data based on field or character positions.
+Extract delimited fields or character ranges from input lines.
 
-It supports field-based extraction with custom delimiters and character-based extraction.
+Supports custom delimiters and open-ended field ranges.
 
 Usage:
     cut.py [OPTIONS] [FILES...]
 """
 
-import argparse
 import logging
 import sys
 from typing import List
@@ -40,7 +39,9 @@ def create_parser():
         "-c",
         "--characters",
         type=str,
-        help="Extract these character positions (comma-separated or ranges like 1,3,5-7)",
+        help=(
+            "Extract character positions (comma-separated or ranges like 1,3,5-7)"
+        ),
     )
 
     # Delimiter and options
@@ -57,7 +58,7 @@ def create_parser():
         action="store_true",
         help="Suppress lines without the delimiter (field mode only).",
     )
-    
+
     # Input files
     parser.add_argument(
         "input_files",
@@ -70,9 +71,9 @@ def create_parser():
 
 
 def parse_field_spec(spec: str) -> tuple[List[int], bool]:
-    """Parse field specification like '1,3,5-7,10-' into a list of field indices (1-based).
-    
-    Returns: (field_indices, has_open_ended_range)
+    """Parse a field spec such as '1,3,5-7,10-' into 1-based field indices.
+
+    Returns (field_indices, has_open_ended_range).
     """
     fields = set()
     parts = spec.split(",")
@@ -90,7 +91,7 @@ def parse_field_spec(spec: str) -> tuple[List[int], bool]:
             end = int(end_str) if end_str else None
 
             if start <= 0:
-                raise ValueError(f"Field numbers must be >= 1")
+                raise ValueError("Field numbers must be >= 1")
 
             if end is None:
                 # Open-ended range: 5- means from 5 onwards
@@ -104,21 +105,23 @@ def parse_field_spec(spec: str) -> tuple[List[int], bool]:
         else:
             field_num = int(part)
             if field_num <= 0:
-                raise ValueError(f"Field numbers must be >= 1")
+                raise ValueError("Field numbers must be >= 1")
             fields.add(field_num)
 
     return (sorted(fields), has_open_ended)
 
 
-def extract_fields(line: str, field_indices: List[int], delimiter: str, open_ended: bool) -> str:
+def extract_fields(
+    line: str, field_indices: List[int], delimiter: str, open_ended: bool
+) -> str:
     """Extract specified fields from a delimited line."""
     fields = line.split(delimiter)
-    
+
     if open_ended:
         # Get from the first field number onwards
         start_idx = field_indices[0] - 1
         return delimiter.join(fields[start_idx:])
-    
+
     result = []
     for idx in field_indices:
         field_num = idx - 1  # Convert 1-based to 0-based
@@ -136,7 +139,7 @@ def extract_characters(line: str, char_indices: List[int], open_ended: bool) -> 
         # Get from the first character onwards
         start_idx = char_indices[0] - 1
         return line[start_idx:]
-    
+
     result = []
     for idx in char_indices:
         char_num = idx - 1  # Convert 1-based to 0-based
@@ -146,7 +149,7 @@ def extract_characters(line: str, char_indices: List[int], open_ended: bool) -> 
     return "".join(result)
 
 
-def main(args: list[str] | None = None) -> int:
+def main(args: list[str] | None = None) -> int:  # noqa: C901
     """Main function to execute the cut command."""
     parser = create_parser()
     if args is None:
@@ -190,7 +193,9 @@ def main(args: list[str] | None = None) -> int:
 
             # Extract and output
             if mode == "field":
-                output = extract_fields(line, indices, parsed_args.delimiter, open_ended)
+                output = extract_fields(
+                    line, indices, parsed_args.delimiter, open_ended
+                )
             else:  # mode == "char"
                 output = extract_characters(line, indices, open_ended)
 

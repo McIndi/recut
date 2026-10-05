@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    container: python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install project and dev tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Formatting (black, isort)
+        run: |
+          black --check .
+          isort --check-only .
+      - name: Lint (flake8)
+        run: flake8 .
+      - name: Typecheck (mypy)
+        run: mypy src
+      - name: Security (bandit)
+        run: bandit -r src
+      - name: Unit tests (in-tree)
+        run: pytest tests/ --ignore=tests/test_installed_wheel.py
+  wheel-smoke:
+    needs: test
+    runs-on: ubuntu-24.04
+    container: python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install build tooling and run installed-wheel smoke tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pytest tests/test_installed_wheel.py -v --no-cov

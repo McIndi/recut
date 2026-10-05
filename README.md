@@ -27,14 +27,16 @@ git clone https://github.com/McIndi/recut.git
 cd recut
 ```
 
-Install dependencies:
+Install the package (editable install for development):
 
 ```bash
 pip install -e .
 
-# Or for development
-pip install -e .[dev]
+# Or for development tooling and tests
+pip install -e ".[dev]"
 ```
+
+After installation, `greppy` and `cutty` are available on your `PATH`. Behavior described below is what the automated test suite exercises on Linux with Python 3.10+; it is not a claim of full POSIX or GNU compatibility on every platform.
 
 ## Running Tests
 
@@ -48,29 +50,101 @@ black .
 black --check .
 
 # Security scanning with Bandit
-bandit -r .
+bandit -r src
 
 # Type checking with mypy
-mypy .
+mypy src
 
 # Run tests with pytest
 pytest
 
-# Run all checks
-black --check . && bandit -r . && mypy . && pytest
+# Installed-wheel smoke tests (builds a wheel and runs CLIs outside the source tree)
+pytest tests/test_installed_wheel.py
+
+# Run common checks together
+black --check . && isort --check-only . && flake8 . && bandit -r src && mypy src && pytest
 ```
 
-## Usage
+## Command reference
 
-Each command can be run as a Python module or script. Refer to individual command documentation for specific usage instructions.
+### greppy
 
-## Available Commands
+Search input lines for a regular expression pattern.
 
-Currently implemented commands:
+**Syntax:** `greppy [OPTIONS] PATTERN [input_files...]`
 
-- (Coming soon - add your implementations here)
+| Option | Description |
+|--------|-------------|
+| `-i`, `--ignore-case` | Case-insensitive matching |
+| `-w`, `--word` | Match whole words only |
+| `-H`, `--with-filename` | Prefix each match with the source file name |
+| `-n`, `--line-number` | Prefix each match with the line number |
+| `-q`, `--quiet` | Suppress matching lines; exit code still reflects match/no-match |
+| `-l`, `--files-with-matches` | Print only file names that contain a match |
+| `--output-file` | Parsed for API consistency; output still goes to stdout in current releases |
+| `--log-level` | Logging level (`DEBUG` … `CRITICAL`, default `INFO`) |
 
-Each command is located in the `src/recut/commands/` directory.
+**Input:** If no files are given, standard input is read. Use `-` explicitly for stdin in a file list. Glob patterns in file arguments are expanded.
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| `0` | At least one match |
+| `1` | I/O or other runtime error |
+| `2` | Invalid regular expression |
+| `3` | No matches |
+
+**Examples:**
+
+```bash
+greppy error /var/log/app.log
+greppy -n warning issues.txt
+echo "one two" | greppy -w two
+```
+
+### cutty
+
+Extract delimited fields or fixed character positions from each input line.
+
+**Syntax:** `cutty [OPTIONS] [input_files...]`
+
+Either `-f`/`--field` or `-c`/`--characters` is required (mutually exclusive).
+
+| Option | Description |
+|--------|-------------|
+| `-f`, `--field SPEC` | Comma-separated fields or ranges (1-based), e.g. `1,3,5-7` or `3-` for open-ended |
+| `-c`, `--characters SPEC` | Comma-separated character positions or ranges (1-based) |
+| `-d`, `--delimiter` | Field delimiter (default: tab) |
+| `-s`, `--only-delimited` | In field mode, skip lines that do not contain the delimiter |
+| `--output-file` | Parsed for API consistency; output still goes to stdout in current releases |
+| `--log-level` | Logging level (`DEBUG` … `CRITICAL`, default `INFO`) |
+
+**Input:** If no files are given, standard input is read.
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Invalid arguments, invalid field/character spec, or I/O error |
+
+**Examples:**
+
+```bash
+cutty -f 1,3 data.tsv
+cutty -d ',' -f 2 records.csv
+echo "a:b:c" | cutty -d ':' -f 2
+cutty -c 1-5 lines.txt
+```
+
+### Pipelines
+
+Installed entrypoints compose in shell pipelines like other line-oriented tools:
+
+```bash
+greppy pattern file.txt | cutty -f 2
+```
 
 ## Blog Series
 
