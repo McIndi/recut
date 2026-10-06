@@ -11,25 +11,34 @@ import sys
 from contextlib import ExitStack
 from typing import Callable, Generator, List, Optional, TextIO
 
-# Input and output are decoded/encoded as UTF-8 with "surrogateescape": bytes
-# that are not valid UTF-8 (for example Latin-1 text) become lone surrogates on
-# the way in and are written back as the same bytes on the way out, so they
-# pass through unchanged instead of raising UnicodeDecodeError.
-STREAM_ENCODING = "utf-8"
+# Input and output use the same codec that Python uses for command-line
+# arguments and file names (the file system encoding: UTF-8 in UTF-8 and C
+# locales, the locale's charset otherwise), always with "surrogateescape".
+# Bytes the codec cannot decode (for example Latin-1 text in a UTF-8 locale)
+# become lone surrogates on the way in and are written back as the same bytes
+# on the way out, so they pass through unchanged instead of raising
+# UnicodeDecodeError. Using one codec everywhere keeps patterns, delimiters and
+# printed file names consistent with the input bytes in any locale.
 STREAM_ERRORS = "surrogateescape"
 
 
+def stream_encoding() -> str:
+    """Return the codec used for input files, stdin and stdout."""
+    return sys.getfilesystemencoding()
+
+
 def configure_standard_streams() -> None:
-    """Make stdin and stdout pass non-UTF-8 bytes through unchanged.
+    """Make stdin and stdout pass undecodable bytes through unchanged.
 
     Streams that cannot be reconfigured (for example test doubles) are left
     as they are.
     """
+    encoding = stream_encoding()
     for stream in (sys.stdin, sys.stdout):
         if not isinstance(stream, io.TextIOWrapper):
             continue
         try:
-            stream.reconfigure(encoding=STREAM_ENCODING, errors=STREAM_ERRORS)
+            stream.reconfigure(encoding=encoding, errors=STREAM_ERRORS)
         except (ValueError, OSError):
             # ValueError: data was already read; keep the current setup.
             pass
@@ -110,9 +119,9 @@ def file_input_handler(
 
     Yields:
         Tuples of (line, source_filename) for each line in the input files.
-        Lines have trailing newlines removed. Files are read as UTF-8 with
-        "surrogateescape", so invalid UTF-8 bytes do not raise; standard
-        input uses whatever decoding sys.stdin has (see
+        Lines have trailing newlines removed. Files are read with
+        stream_encoding() and "surrogateescape", so undecodable bytes do not
+        raise. Standard input uses whatever decoding sys.stdin has (see
         configure_standard_streams).
     """
     targets = input_files or ["-"]
@@ -130,7 +139,7 @@ def file_input_handler(
                         open(
                             target,
                             "r",
-                            encoding=STREAM_ENCODING,
+                            encoding=stream_encoding(),
                             errors=STREAM_ERRORS,
                         )
                     )

@@ -133,3 +133,22 @@ def test_cutty_main_latin1_stdin_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cut.main(["-d", ",", "-f", "2"]) == cut.RETURN_CODES["SUCCESS"]
     stdout.flush()
     assert stdout.buffer.getvalue() == b"na\xefve\nx\n"  # type: ignore[attr-defined]
+
+
+def test_codec_follows_file_system_encoding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Data uses the same codec as argv and file names (review F1)."""
+    monkeypatch.setattr("sys.getfilesystemencoding", lambda: "iso8859-15")
+    stdout = binary_stream()
+    monkeypatch.setattr("sys.stdin", binary_stream(b"x\xe9\n"))
+    monkeypatch.setattr("sys.stdout", stdout)
+    data = tmp_path / "latin1.txt"
+    data.write_bytes(b"caf\xe9\n")
+
+    core.configure_standard_streams()
+    lines = [line for line, _ in core.file_input_handler([str(data), "-"])]
+
+    assert core.stream_encoding() == "iso8859-15"
+    assert stdout.encoding == "iso8859-15"
+    assert lines == ["caf\xe9", "x\xe9"]

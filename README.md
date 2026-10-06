@@ -84,7 +84,7 @@ Search input lines for a regular expression pattern.
 | `--output-file` | Reserved and currently ignored: it is accepted but no file is written; output always goes to stdout |
 | `--log-level` | Logging level (`DEBUG` … `CRITICAL`, default `INFO`) |
 
-**Input:** If no files are given, standard input is read. Use `-` explicitly for stdin in a file list. Glob patterns in file arguments are expanded. Input is read as UTF-8; bytes that are not valid UTF-8 (for example Latin-1 text) do not cause an error and are written to the output unchanged (see [Encoding](#encoding)).
+**Input:** If no files are given, standard input is read. Use `-` explicitly for stdin in a file list. Glob patterns in file arguments are expanded. Bytes that cannot be decoded (for example Latin-1 text in a UTF-8 locale) do not cause an error and are written to the output as the same bytes (see [Encoding](#encoding)).
 
 **Exit codes:**
 
@@ -121,7 +121,7 @@ Either `-f`/`--field` or `-c`/`--characters` is required (mutually exclusive).
 | `--output-file` | Reserved and currently ignored: it is accepted but no file is written; output always goes to stdout |
 | `--log-level` | Logging level (`DEBUG` … `CRITICAL`, default `INFO`) |
 
-**Input:** If no files are given, standard input is read. Bytes that are not valid UTF-8 are passed through unchanged (see [Encoding](#encoding)).
+**Input:** If no files are given, standard input is read. Bytes that cannot be decoded are written to the output as the same bytes (see [Encoding](#encoding)).
 
 **Exit codes:**
 
@@ -152,14 +152,14 @@ When a reader exits before it reads all of the output, as `head` does, `greppy` 
 
 ### Encoding
 
-Both commands read files and standard input as UTF-8 and write UTF-8, whatever the locale. Bytes that are not valid UTF-8 are kept with Python's `surrogateescape` error handler, so they are written back as the same bytes. For example:
+Both commands decode files, standard input, the command-line arguments and file names with one codec: Python's file system encoding. This is UTF-8 in UTF-8 and C locales and the locale's character set in other locales (for example ISO-8859-15). Bytes that the codec cannot decode are kept with Python's `surrogateescape` error handler, so they are written back as the same bytes. Patterns, delimiters and printed file names therefore match the input bytes in any locale. For example, in a UTF-8 locale:
 
 ```bash
 printf 'caf\xe9 hello\nplain hello\n' > latin1.txt
 greppy hello latin1.txt   # prints both lines, byte for byte; exit 0
 ```
 
-Patterns, field numbers and character positions apply to the decoded text. Each byte that is not valid UTF-8 counts as one character, both for `cutty -c` and for regular expressions (for example, `.` matches it).
+Only the undecodable bytes are guaranteed to be unchanged: as before, `greppy` strips leading and trailing whitespace from matching lines, and line endings are normalized to `\n` (CRLF input gives LF output). Patterns, field numbers and character positions apply to the decoded text. Each undecodable byte counts as one character, both for `cutty -c` and for regular expressions (for example, `.` matches it).
 
 ### Known limitations
 
@@ -167,13 +167,13 @@ Patterns, field numbers and character positions apply to the decoded text. Each 
 - A pipeline's exit status is the last command's. To see an upstream greppy status (3 no match, 2 usage/regex, 1 error), use `set -o pipefail`; recut does not claim GNU exit-code parity.
 - `greppy` strips leading and trailing whitespace from matching lines. In field mode, `cutty` treats a line without the delimiter as one field (GNU `cut` passes it through).
 - `--output-file` is ignored (see the option tables).
-- Quiet exit on a closed output pipe (status 141) depends on `SIGPIPE`, so it applies to POSIX systems only. Behavior on Windows is not tested.
+- Quiet exit on a closed output pipe (status 141) depends on `SIGPIPE`, so it applies to POSIX systems only. Behavior on Windows is not tested; there, standard output is now written as UTF-8 (Python's file system encoding) rather than the console or ANSI code page.
 
 ## Changes
 
 ### 0.1.1
 
-- Fixed: `greppy` and `cutty` no longer crash with `UnicodeDecodeError` on input files or standard input that are not valid UTF-8. Such bytes pass through to the output unchanged ([#3](https://github.com/McIndi/recut/issues/3)).
+- Fixed: `greppy` and `cutty` no longer crash with `UnicodeDecodeError` on input files or standard input that cannot be decoded, such as Latin-1 text in a UTF-8 locale. Such bytes pass through to the output unchanged, and input, output, arguments and file names share one codec in every locale ([#3](https://github.com/McIndi/recut/issues/3)).
 - Fixed: piping output into a command that exits early, such as `head -1`, no longer prints a `BrokenPipeError` message or exits with status 120. The commands now stop quietly with shell status 141, as `grep` and `cut` do ([#4](https://github.com/McIndi/recut/issues/4)).
 - The `greppy` and `cutty` console scripts now point to `cli()` in each command module, which sets up standard streams and `SIGPIPE` and then calls `main()`. `main()` is unchanged.
 

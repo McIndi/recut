@@ -340,3 +340,108 @@ def test_pipe_into_head_exits_quietly_with_sigpipe_status(
     assert result.stderr == ""
     assert result.stdout == "1\nstatus=141,0\n"
     assert result.returncode == 0
+
+
+# --- Arguments and file names use the same codec as the data (review F1) ---
+
+LEGACY_LOCALES = ("en_US.iso885915", "en_US.iso88591", "en_GB.iso885915")
+
+
+def run_cli_argv_bytes(
+    executable: Path, args: list[bytes], *, cwd: Path, env_extra: dict[str, str]
+) -> subprocess.CompletedProcess[bytes]:
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env.pop("PYTHONIOENCODING", None)
+    env.update(env_extra)
+    return subprocess.run(
+        [os.fsencode(executable), *args],
+        capture_output=True,
+        cwd=cwd,
+        env=env,
+        check=False,
+    )
+
+
+def _legacy_locale_env(installed_cli: dict[str, Path]) -> dict[str, str]:
+    """Return env for an installed ISO-8859 locale, or skip with the reason."""
+    python = installed_cli["greppy"].parent / "python"
+    for name in LEGACY_LOCALES:
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env.update({"LC_ALL": name, "PYTHONUTF8": "0"})
+        probe = subprocess.run(
+            [str(python), "-c", "import sys; print(sys.getfilesystemencoding())"],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        if probe.stdout.strip().startswith("iso8859"):
+            return {"LC_ALL": name, "PYTHONUTF8": "0"}
+    pytest.skip(
+        f"no ISO-8859 locale installed (tried {', '.join(LEGACY_LOCALES)}); "
+        "the C/ASCII-locale form of this test still runs"
+    )
+
+
+# Each case: (tool, args, expected stdout). R is a raw non-ASCII byte string
+# that appears in the data file, a file name and the arguments.
+ARGV_CASES = {
+    "cutty-delimiter": (
+        "cutty",
+        [b"-s", b"-d", b"R", b"-f", b"2", b"d.txt"],
+        b"b\ny\n",
+    ),
+    "greppy-pattern": ("greppy", [b"xR", b"d.txt"], b"xRyRz\n"),
+    "greppy-l-filename": ("greppy", [b"-l", b"x", b"fR.txt"], b"fR.txt\n"),
+    "greppy-H-filename": ("greppy", [b"-H", b"x", b"fR.txt"], b"fR.txt:x\n"),
+}
+
+
+def _check_argv_case(
+    installed_cli: dict[str, Path],
+    tmp_path: Path,
+    env: dict[str, str],
+    raw: bytes,
+    case: str,
+) -> None:
+    tool, args, expected = ARGV_CASES[case]
+    (tmp_path / "d.txt").write_bytes(b"aRbRc\nxRyRz\nplain\n".replace(b"R", raw))
+    (tmp_path / os.fsdecode(b"fR.txt".replace(b"R", raw))).write_bytes(b"x\n")
+
+    result = run_cli_argv_bytes(
+        installed_cli[tool],
+        [arg.replace(b"R", raw) for arg in args],
+        cwd=tmp_path,
+        env_extra=env,
+    )
+    assert result.stderr == b""
+    assert result.returncode == 0
+    assert result.stdout == expected.replace(b"R", raw)
+
+
+@pytest.mark.parametrize("case", list(ARGV_CASES))
+def test_legacy_locale_arguments_match_input_bytes(
+    installed_cli: dict[str, Path], tmp_path: Path, case: str
+) -> None:
+    """ISO-8859 locale: raw-byte args and file names behave as in 0.1.0.
+
+    Python decodes argv with ISO-8859-15 here; 0.1.1 at 1efeaa0 forced data
+    to UTF-8, so the \\xe9 delimiter and pattern stopped matching and
+    printed file names were re-encoded as UTF-8.
+    """
+    env = _legacy_locale_env(installed_cli)
+    _check_argv_case(installed_cli, tmp_path, env, b"\xe9", case)
+
+
+@pytest.mark.parametrize("case", list(ARGV_CASES))
+def test_ascii_locale_arguments_match_input_bytes(
+    installed_cli: dict[str, Path], tmp_path: Path, case: str
+) -> None:
+    """C locale without UTF-8 mode: Python decodes argv as ASCII.
+
+    Runs in any environment, including the CI container. UTF-8 bytes in the
+    arguments show a mismatch between the argv and data codecs (the
+    delimiter and pattern cases); file names round-trip in either case.
+    """
+    env = {"LC_ALL": "C", "PYTHONUTF8": "0"}
+    _check_argv_case(installed_cli, tmp_path, env, b"\xc3\xa9", case)
