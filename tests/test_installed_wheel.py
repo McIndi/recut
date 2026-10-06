@@ -197,3 +197,251 @@ def test_output_file_help_does_not_claim_it_works(
     assert result.returncode == 0
     assert result.stdout.strip() == "b"
     assert not target.exists()
+
+
+# --- 0.1.1: non-UTF-8 input (issue #3) and closed output pipes (issue #4) ---
+
+LATIN1_LINES = b"caf\xe9 hello\nplain hello\nna\xefve other\n"
+
+# Python's own stdin decoding depends on the environment: C and C.UTF-8
+# locales use "surrogateescape", while a UTF-8 locale such as en_US.UTF-8 is
+# strict. PYTHONIOENCODING=utf-8:strict forces the strict case anywhere.
+STDIN_ENVIRONMENTS = pytest.mark.parametrize(
+    "stdin_env",
+    [
+        {"LC_ALL": "C"},
+        {"LC_ALL": "C.UTF-8"},
+        {"PYTHONIOENCODING": "utf-8:strict"},
+        {"LC_ALL": "C", "PYTHONUTF8": "0"},
+    ],
+    ids=["C", "C.UTF-8", "strict-utf8", "C-ascii"],
+)
+
+
+def run_cli_bytes(
+    executable: Path,
+    args: list[str],
+    *,
+    input_bytes: bytes | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.update(extra_env or {})
+    return subprocess.run(
+        [str(executable), *args],
+        input=input_bytes,
+        capture_output=True,
+        cwd=Path("/tmp"),
+        env=env,
+        check=False,
+    )
+
+
+def test_greppy_latin1_file_passes_bytes_through(
+    installed_cli: dict[str, Path], tmp_path: Path
+) -> None:
+    data = tmp_path / "latin1.txt"
+    data.write_bytes(LATIN1_LINES)
+
+    hit = run_cli_bytes(installed_cli["greppy"], ["hello", str(data)])
+    assert hit.returncode == 0
+    assert hit.stdout == b"caf\xe9 hello\nplain hello\n"
+    assert hit.stderr == b""
+
+    numbered = run_cli_bytes(installed_cli["greppy"], ["-n", "na.ve", str(data)])
+    assert numbered.returncode == 0
+    assert numbered.stdout == b"3:na\xefve other\n"
+
+    for flag in ("-q", "-l"):
+        result = run_cli_bytes(installed_cli["greppy"], [flag, "hello", str(data)])
+        assert result.returncode == 0, flag
+        assert result.stderr == b"", flag
+
+    miss = run_cli_bytes(installed_cli["greppy"], ["zzz", str(data)])
+    assert miss.returncode == 3
+    assert miss.stdout == b""
+    assert b"Traceback" not in miss.stderr
+
+
+@STDIN_ENVIRONMENTS
+def test_greppy_latin1_stdin_passes_bytes_through(
+    installed_cli: dict[str, Path], stdin_env: dict[str, str]
+) -> None:
+    result = run_cli_bytes(
+        installed_cli["greppy"],
+        ["hello"],
+        input_bytes=LATIN1_LINES,
+        extra_env=stdin_env,
+    )
+    assert result.returncode == 0
+    assert result.stdout == b"caf\xe9 hello\nplain hello\n"
+    assert result.stderr == b""
+
+
+def test_cutty_latin1_file_passes_bytes_through(
+    installed_cli: dict[str, Path], tmp_path: Path
+) -> None:
+    data = tmp_path / "latin1.csv"
+    data.write_bytes(b"caf\xe9,na\xefve\nplain,x\n")
+
+    fields = run_cli_bytes(installed_cli["cutty"], ["-d", ",", "-f", "2", str(data)])
+    assert fields.returncode == 0
+    assert fields.stdout == b"na\xefve\nx\n"
+    assert fields.stderr == b""
+
+    chars = run_cli_bytes(installed_cli["cutty"], ["-c", "1-4", str(data)])
+    assert chars.returncode == 0
+    assert chars.stdout == b"caf\xe9\nplai\n"
+
+
+@STDIN_ENVIRONMENTS
+def test_cutty_latin1_stdin_passes_bytes_through(
+    installed_cli: dict[str, Path], stdin_env: dict[str, str]
+) -> None:
+    result = run_cli_bytes(
+        installed_cli["cutty"],
+        ["-d", " ", "-f", "1"],
+        input_bytes=LATIN1_LINES,
+        extra_env=stdin_env,
+    )
+    assert result.returncode == 0
+    assert result.stdout == b"caf\xe9\nplain\nna\xefve\n"
+    assert result.stderr == b""
+
+
+@pytest.mark.parametrize(
+    ("name", "args", "line_suffix"),
+    [("greppy", ["1"], ""), ("cutty", ["-f", "1"], "\tx")],
+)
+def test_pipe_into_head_exits_quietly_with_sigpipe_status(
+    installed_cli: dict[str, Path],
+    tmp_path: Path,
+    name: str,
+    args: list[str],
+    line_suffix: str,
+) -> None:
+    """`tool | head -1` prints one line, nothing on stderr, shell status 141."""
+    data = tmp_path / "many.txt"
+    # Far more output than a pipe buffer holds, so the tool is still writing
+    # when head exits.
+    data.write_text("".join(f"{n}{line_suffix}\n" for n in range(1, 200001)))
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    script = '"$@" | head -1; echo "status=${PIPESTATUS[0]},${PIPESTATUS[1]}"'
+    result = subprocess.run(
+        ["bash", "-c", script, "bash", str(installed_cli[name]), *args, str(data)],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=env,
+        check=False,
+    )
+    assert result.stderr == ""
+    assert result.stdout == "1\nstatus=141,0\n"
+    assert result.returncode == 0
+
+
+# --- Arguments and file names use the same codec as the data (review F1) ---
+
+LEGACY_LOCALES = ("en_US.iso885915", "en_US.iso88591", "en_GB.iso885915")
+
+
+def run_cli_argv_bytes(
+    executable: Path, args: list[bytes], *, cwd: Path, env_extra: dict[str, str]
+) -> subprocess.CompletedProcess[bytes]:
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env.pop("PYTHONIOENCODING", None)
+    env.update(env_extra)
+    return subprocess.run(
+        [os.fsencode(executable), *args],
+        capture_output=True,
+        cwd=cwd,
+        env=env,
+        check=False,
+    )
+
+
+def _legacy_locale_env(installed_cli: dict[str, Path]) -> dict[str, str]:
+    """Return env for an installed ISO-8859 locale, or skip with the reason."""
+    python = installed_cli["greppy"].parent / "python"
+    for name in LEGACY_LOCALES:
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env.update({"LC_ALL": name, "PYTHONUTF8": "0"})
+        probe = subprocess.run(
+            [str(python), "-c", "import sys; print(sys.getfilesystemencoding())"],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        if probe.stdout.strip().startswith("iso8859"):
+            return {"LC_ALL": name, "PYTHONUTF8": "0"}
+    pytest.skip(
+        f"no ISO-8859 locale installed (tried {', '.join(LEGACY_LOCALES)}); "
+        "the C/ASCII-locale form of this test still runs"
+    )
+
+
+# Each case: (tool, args, expected stdout). R is a raw non-ASCII byte string
+# that appears in the data file, a file name and the arguments.
+ARGV_CASES = {
+    "cutty-delimiter": (
+        "cutty",
+        [b"-s", b"-d", b"R", b"-f", b"2", b"d.txt"],
+        b"b\ny\n",
+    ),
+    "greppy-pattern": ("greppy", [b"xR", b"d.txt"], b"xRyRz\n"),
+    "greppy-l-filename": ("greppy", [b"-l", b"x", b"fR.txt"], b"fR.txt\n"),
+    "greppy-H-filename": ("greppy", [b"-H", b"x", b"fR.txt"], b"fR.txt:x\n"),
+}
+
+
+def _check_argv_case(
+    installed_cli: dict[str, Path],
+    tmp_path: Path,
+    env: dict[str, str],
+    raw: bytes,
+    case: str,
+) -> None:
+    tool, args, expected = ARGV_CASES[case]
+    (tmp_path / "d.txt").write_bytes(b"aRbRc\nxRyRz\nplain\n".replace(b"R", raw))
+    (tmp_path / os.fsdecode(b"fR.txt".replace(b"R", raw))).write_bytes(b"x\n")
+
+    result = run_cli_argv_bytes(
+        installed_cli[tool],
+        [arg.replace(b"R", raw) for arg in args],
+        cwd=tmp_path,
+        env_extra=env,
+    )
+    assert result.stderr == b""
+    assert result.returncode == 0
+    assert result.stdout == expected.replace(b"R", raw)
+
+
+@pytest.mark.parametrize("case", list(ARGV_CASES))
+def test_legacy_locale_arguments_match_input_bytes(
+    installed_cli: dict[str, Path], tmp_path: Path, case: str
+) -> None:
+    """ISO-8859 locale: raw-byte args and file names behave as in 0.1.0.
+
+    Python decodes argv with ISO-8859-15 here; 0.1.1 at 1efeaa0 forced data
+    to UTF-8, so the \\xe9 delimiter and pattern stopped matching and
+    printed file names were re-encoded as UTF-8.
+    """
+    env = _legacy_locale_env(installed_cli)
+    _check_argv_case(installed_cli, tmp_path, env, b"\xe9", case)
+
+
+@pytest.mark.parametrize("case", list(ARGV_CASES))
+def test_ascii_locale_arguments_match_input_bytes(
+    installed_cli: dict[str, Path], tmp_path: Path, case: str
+) -> None:
+    """C locale without UTF-8 mode: Python decodes argv as ASCII.
+
+    Runs in any environment, including the CI container. UTF-8 bytes in the
+    arguments show a mismatch between the argv and data codecs (the
+    delimiter and pattern cases); file names round-trip in either case.
+    """
+    env = {"LC_ALL": "C", "PYTHONUTF8": "0"}
+    _check_argv_case(installed_cli, tmp_path, env, b"\xc3\xa9", case)
