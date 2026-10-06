@@ -197,3 +197,146 @@ def test_output_file_help_does_not_claim_it_works(
     assert result.returncode == 0
     assert result.stdout.strip() == "b"
     assert not target.exists()
+
+
+# --- 0.1.1: non-UTF-8 input (issue #3) and closed output pipes (issue #4) ---
+
+LATIN1_LINES = b"caf\xe9 hello\nplain hello\nna\xefve other\n"
+
+# Python's own stdin decoding depends on the environment: C and C.UTF-8
+# locales use "surrogateescape", while a UTF-8 locale such as en_US.UTF-8 is
+# strict. PYTHONIOENCODING=utf-8:strict forces the strict case anywhere.
+STDIN_ENVIRONMENTS = pytest.mark.parametrize(
+    "stdin_env",
+    [
+        {"LC_ALL": "C"},
+        {"LC_ALL": "C.UTF-8"},
+        {"PYTHONIOENCODING": "utf-8:strict"},
+        {"LC_ALL": "C", "PYTHONUTF8": "0"},
+    ],
+    ids=["C", "C.UTF-8", "strict-utf8", "C-ascii"],
+)
+
+
+def run_cli_bytes(
+    executable: Path,
+    args: list[str],
+    *,
+    input_bytes: bytes | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.update(extra_env or {})
+    return subprocess.run(
+        [str(executable), *args],
+        input=input_bytes,
+        capture_output=True,
+        cwd=Path("/tmp"),
+        env=env,
+        check=False,
+    )
+
+
+def test_greppy_latin1_file_passes_bytes_through(
+    installed_cli: dict[str, Path], tmp_path: Path
+) -> None:
+    data = tmp_path / "latin1.txt"
+    data.write_bytes(LATIN1_LINES)
+
+    hit = run_cli_bytes(installed_cli["greppy"], ["hello", str(data)])
+    assert hit.returncode == 0
+    assert hit.stdout == b"caf\xe9 hello\nplain hello\n"
+    assert hit.stderr == b""
+
+    numbered = run_cli_bytes(installed_cli["greppy"], ["-n", "na.ve", str(data)])
+    assert numbered.returncode == 0
+    assert numbered.stdout == b"3:na\xefve other\n"
+
+    for flag in ("-q", "-l"):
+        result = run_cli_bytes(installed_cli["greppy"], [flag, "hello", str(data)])
+        assert result.returncode == 0, flag
+        assert result.stderr == b"", flag
+
+    miss = run_cli_bytes(installed_cli["greppy"], ["zzz", str(data)])
+    assert miss.returncode == 3
+    assert miss.stdout == b""
+    assert b"Traceback" not in miss.stderr
+
+
+@STDIN_ENVIRONMENTS
+def test_greppy_latin1_stdin_passes_bytes_through(
+    installed_cli: dict[str, Path], stdin_env: dict[str, str]
+) -> None:
+    result = run_cli_bytes(
+        installed_cli["greppy"],
+        ["hello"],
+        input_bytes=LATIN1_LINES,
+        extra_env=stdin_env,
+    )
+    assert result.returncode == 0
+    assert result.stdout == b"caf\xe9 hello\nplain hello\n"
+    assert result.stderr == b""
+
+
+def test_cutty_latin1_file_passes_bytes_through(
+    installed_cli: dict[str, Path], tmp_path: Path
+) -> None:
+    data = tmp_path / "latin1.csv"
+    data.write_bytes(b"caf\xe9,na\xefve\nplain,x\n")
+
+    fields = run_cli_bytes(installed_cli["cutty"], ["-d", ",", "-f", "2", str(data)])
+    assert fields.returncode == 0
+    assert fields.stdout == b"na\xefve\nx\n"
+    assert fields.stderr == b""
+
+    chars = run_cli_bytes(installed_cli["cutty"], ["-c", "1-4", str(data)])
+    assert chars.returncode == 0
+    assert chars.stdout == b"caf\xe9\nplai\n"
+
+
+@STDIN_ENVIRONMENTS
+def test_cutty_latin1_stdin_passes_bytes_through(
+    installed_cli: dict[str, Path], stdin_env: dict[str, str]
+) -> None:
+    result = run_cli_bytes(
+        installed_cli["cutty"],
+        ["-d", " ", "-f", "1"],
+        input_bytes=LATIN1_LINES,
+        extra_env=stdin_env,
+    )
+    assert result.returncode == 0
+    assert result.stdout == b"caf\xe9\nplain\nna\xefve\n"
+    assert result.stderr == b""
+
+
+@pytest.mark.parametrize(
+    ("name", "args", "line_suffix"),
+    [("greppy", ["1"], ""), ("cutty", ["-f", "1"], "\tx")],
+)
+def test_pipe_into_head_exits_quietly_with_sigpipe_status(
+    installed_cli: dict[str, Path],
+    tmp_path: Path,
+    name: str,
+    args: list[str],
+    line_suffix: str,
+) -> None:
+    """`tool | head -1` prints one line, nothing on stderr, shell status 141."""
+    data = tmp_path / "many.txt"
+    # Far more output than a pipe buffer holds, so the tool is still writing
+    # when head exits.
+    data.write_text("".join(f"{n}{line_suffix}\n" for n in range(1, 200001)))
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    script = '"$@" | head -1; echo "status=${PIPESTATUS[0]},${PIPESTATUS[1]}"'
+    result = subprocess.run(
+        ["bash", "-c", script, "bash", str(installed_cli[name]), *args, str(data)],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=env,
+        check=False,
+    )
+    assert result.stderr == ""
+    assert result.stdout == "1\nstatus=141,0\n"
+    assert result.returncode == 0

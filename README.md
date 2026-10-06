@@ -84,7 +84,7 @@ Search input lines for a regular expression pattern.
 | `--output-file` | Reserved and currently ignored: it is accepted but no file is written; output always goes to stdout |
 | `--log-level` | Logging level (`DEBUG` … `CRITICAL`, default `INFO`) |
 
-**Input:** If no files are given, standard input is read. Use `-` explicitly for stdin in a file list. Glob patterns in file arguments are expanded.
+**Input:** If no files are given, standard input is read. Use `-` explicitly for stdin in a file list. Glob patterns in file arguments are expanded. Input is read as UTF-8; bytes that are not valid UTF-8 (for example Latin-1 text) do not cause an error and are written to the output unchanged (see [Encoding](#encoding)).
 
 **Exit codes:**
 
@@ -94,6 +94,7 @@ Search input lines for a regular expression pattern.
 | `1` | I/O or other runtime error |
 | `2` | Invalid regular expression, or command-line usage error (missing pattern, unknown option) |
 | `3` | No matches |
+| `141` (shell) | Stopped by `SIGPIPE` because the reader closed the pipe early, for example `greppy x file \| head -1`. Nothing is printed to stderr. This is the same as `grep`; Python's `subprocess` reports it as `-13`. POSIX only. |
 
 **Examples:**
 
@@ -120,7 +121,7 @@ Either `-f`/`--field` or `-c`/`--characters` is required (mutually exclusive).
 | `--output-file` | Reserved and currently ignored: it is accepted but no file is written; output always goes to stdout |
 | `--log-level` | Logging level (`DEBUG` … `CRITICAL`, default `INFO`) |
 
-**Input:** If no files are given, standard input is read.
+**Input:** If no files are given, standard input is read. Bytes that are not valid UTF-8 are passed through unchanged (see [Encoding](#encoding)).
 
 **Exit codes:**
 
@@ -128,6 +129,7 @@ Either `-f`/`--field` or `-c`/`--characters` is required (mutually exclusive).
 |------|---------|
 | `0` | Success |
 | `1` | Invalid arguments, invalid field/character spec, or I/O error |
+| `141` (shell) | Stopped by `SIGPIPE` because the reader closed the pipe early, for example `cutty -f 1 file \| head -1`. Nothing is printed to stderr. This is the same as `cut`; Python's `subprocess` reports it as `-13`. POSIX only. |
 
 **Examples:**
 
@@ -146,12 +148,38 @@ Installed entrypoints compose in shell pipelines like other line-oriented tools:
 greppy pattern file.txt | cutty -f 2
 ```
 
+When a reader exits before it reads all of the output, as `head` does, `greppy` and `cutty` stop quietly with status 141, as `grep` and `cut` do. With `set -o pipefail`, the pipeline status is then 141.
+
+### Encoding
+
+Both commands read files and standard input as UTF-8 and write UTF-8, whatever the locale. Bytes that are not valid UTF-8 are kept with Python's `surrogateescape` error handler, so they are written back as the same bytes. For example:
+
+```bash
+printf 'caf\xe9 hello\nplain hello\n' > latin1.txt
+greppy hello latin1.txt   # prints both lines, byte for byte; exit 0
+```
+
+Patterns, field numbers and character positions apply to the decoded text. Each byte that is not valid UTF-8 counts as one character, both for `cutty -c` and for regular expressions (for example, `.` matches it).
+
 ### Known limitations
 
 - **Mixed open-ended ranges are not supported.** Use `N-` only as the whole `-f` spec (for example `-f 3-`). A mixed list such as `-f 1,3-` selects the fields between the listed numbers too (field 2 is included), and tokens after an open-ended range (for example the `0` in `-f 3-,0`) are not validated. `-c` has the same behavior. These are unfixed bugs, not supported syntax.
 - A pipeline's exit status is the last command's. To see an upstream greppy status (3 no match, 2 usage/regex, 1 error), use `set -o pipefail`; recut does not claim GNU exit-code parity.
 - `greppy` strips leading and trailing whitespace from matching lines. In field mode, `cutty` treats a line without the delimiter as one field (GNU `cut` passes it through).
 - `--output-file` is ignored (see the option tables).
+- Quiet exit on a closed output pipe (status 141) depends on `SIGPIPE`, so it applies to POSIX systems only. Behavior on Windows is not tested.
+
+## Changes
+
+### 0.1.1
+
+- Fixed: `greppy` and `cutty` no longer crash with `UnicodeDecodeError` on input files or standard input that are not valid UTF-8. Such bytes pass through to the output unchanged ([#3](https://github.com/McIndi/recut/issues/3)).
+- Fixed: piping output into a command that exits early, such as `head -1`, no longer prints a `BrokenPipeError` message or exits with status 120. The commands now stop quietly with shell status 141, as `grep` and `cut` do ([#4](https://github.com/McIndi/recut/issues/4)).
+- The `greppy` and `cutty` console scripts now point to `cli()` in each command module, which sets up standard streams and `SIGPIPE` and then calls `main()`. `main()` is unchanged.
+
+### 0.1.0
+
+- First release: `greppy` and `cutty`.
 
 ## Blog Series
 

@@ -26,3 +26,14 @@ def test_python_classifiers_match_requires_python() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
     assert project["requires-python"] == ">=3.10"
     assert "Programming Language :: Python :: 3.9" not in project["classifiers"]
+
+
+def test_readme_documents_sigpipe_status_and_encoding() -> None:
+    readme = (ROOT / "README.md").read_text()
+    # One 141 row in each command's exit-code table (issue #4).
+    assert readme.count("| `141` (shell) | Stopped by `SIGPIPE`") == 2
+    # Byte pass-through for non-UTF-8 input (issue #3).
+    assert "### Encoding" in readme
+    assert "surrogateescape" in readme
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    assert f"### {project['version']}" in readme
