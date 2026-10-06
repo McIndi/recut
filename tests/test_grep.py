@@ -1,12 +1,10 @@
 import io
-import logging
 import re
 from pathlib import Path
 
 import pytest
 
 from recut.commands.grep import RETURN_CODES, _expand_inputs, main
-
 
 
 def write_lines(tmp_path: Path, name: str, lines: list[str]) -> Path:
@@ -123,7 +121,9 @@ def test_main_returns_invalid_regex_on_compile_error(
     assert code == RETURN_CODES["INVALID_REGEX"]
 
 
-def test_main_with_filename_single_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_main_with_filename_single_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     file_path = write_lines(tmp_path, "sample.txt", ["alpha", "needle line", "beta"])
 
     code = main(["needle", "-H", str(file_path)])
@@ -135,7 +135,9 @@ def test_main_with_filename_single_file(tmp_path: Path, capsys: pytest.CaptureFi
     assert "needle line" in out[0]
 
 
-def test_main_with_filename_multiple_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_main_with_filename_multiple_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     file1 = write_lines(tmp_path, "file1.txt", ["needle", "alpha"])
     file2 = write_lines(tmp_path, "file2.txt", ["beta", "needle"])
 
@@ -160,8 +162,12 @@ def test_main_line_number(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     assert "needle line" in out[0]
 
 
-def test_main_line_number_multiple_matches(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-    file_path = write_lines(tmp_path, "sample.txt", ["alpha", "needle", "beta", "needle line"])
+def test_main_line_number_multiple_matches(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    file_path = write_lines(
+        tmp_path, "sample.txt", ["alpha", "needle", "beta", "needle line"]
+    )
 
     code = main(["needle", "-n", str(file_path)])
     out = capsys.readouterr().out.strip().splitlines()
@@ -172,7 +178,9 @@ def test_main_line_number_multiple_matches(tmp_path: Path, capsys: pytest.Captur
     assert out[1].startswith("4:")
 
 
-def test_main_with_filename_and_line_number(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_main_with_filename_and_line_number(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     file_path = write_lines(tmp_path, "sample.txt", ["alpha", "needle line", "beta"])
 
     code = main(["needle", "-H", "-n", str(file_path)])
@@ -220,7 +228,9 @@ def test_main_files_with_matches(tmp_path: Path, capsys: pytest.CaptureFixture[s
     assert str(file2) not in out
 
 
-def test_main_files_with_matches_no_matches(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_main_files_with_matches_no_matches(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     file1 = write_lines(tmp_path, "file1.txt", ["alpha", "beta"])
     file2 = write_lines(tmp_path, "file2.txt", ["gamma", "delta"])
 
@@ -240,22 +250,24 @@ def test_main_quiet_and_files_with_matches_conflict(tmp_path: Path):
     assert code == RETURN_CODES["SUCCESS"]
 
 
-def test_line_numbers_reset_for_each_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_line_numbers_reset_for_each_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     """Test that line numbers reset to 1 for each new file when using -n flag."""
     # Create two files with matches at different positions
     file1 = write_lines(tmp_path, "file1.txt", ["alpha", "needle", "beta", "needle"])
     file2 = write_lines(tmp_path, "file2.txt", ["gamma", "needle", "delta"])
-    
+
     code = main(["needle", "-H", "-n", str(file1), str(file2)])
     out = capsys.readouterr().out.strip().splitlines()
-    
+
     assert code == RETURN_CODES["SUCCESS"]
     assert len(out) == 3
-    
+
     # file1.txt should have matches at lines 2 and 4
     assert f"{file1}:2:needle" in out
     assert f"{file1}:4:needle" in out
-    
+
     # file2.txt should have a match at line 2 (not line 6!)
     # This is the critical assertion - if line numbers don't reset,
     # this would be line 6 (4 lines from file1 + 2 lines into file2)
