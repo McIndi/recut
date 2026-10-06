@@ -146,10 +146,6 @@ Installed entrypoints compose in shell pipelines like other line-oriented tools:
 greppy pattern file.txt | cutty -f 2
 ```
 
-### Promotion policy and enforcement boundary
-
-`.github/workflows/promotion.yml` and `.github/scripts/promotion.py` encode the intended ladder (`feature/*`/`fix/*` → `dev` → `qa` → `prod` → `main`, same repository only) and are tested, but they belong to the pull request they evaluate, so a PR can change them. They are a regression check, **not** independent enforcement. Real enforcement relies on the normal protected-PR boundary (required reviews and required checks) plus a separately trusted gate, owned outside this candidate, that runs the canonical policy and posts its own check before merge. That gate is not part of this repository yet.
-
 ### Known limitations
 
 - **Mixed open-ended ranges are not supported.** Use `N-` only as the whole `-f` spec (for example `-f 3-`). A mixed list such as `-f 1,3-` selects the fields between the listed numbers too (field 2 is included), and tokens after an open-ended range (for example the `0` in `-f 3-,0`) are not validated. `-c` has the same behavior. These are unfixed bugs, not supported syntax.
