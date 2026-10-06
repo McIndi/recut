@@ -19,7 +19,6 @@ classifiers = [
     "Intended Audience :: Education",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -44,17 +43,15 @@ dev = [
     "bandit>=1.7",
     "isort>=5.0",
     "flake8>=6.0",
+    "build>=1.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/McIndi/recut"
 Blog = "https://www.mcindi.com/blog"
 
-[tool.setuptools]
-packages = ["recut"]
-
-[tool.setuptools.package-dir]
-"" = "src"
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.black]
 line-length = 88
@@ -89,7 +86,6 @@ strict_equality = true
 
 [tool.isort]
 profile = "black"
-multi_line_mode = 3
 include_trailing_comma = true
 force_grid_wrap = 0
 use_parentheses = true

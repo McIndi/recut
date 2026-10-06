@@ -38,7 +38,10 @@ class TestFieldMode:
         file_path = write_lines(
             tmp_path,
             "passwd.txt",
-            ["root:x:0:0:root:/root:/bin/bash", "user:x:1000:1000:user:/home/user:/bin/sh"],
+            [
+                "root:x:0:0:root:/root:/bin/bash",
+                "user:x:1000:1000:user:/home/user:/bin/sh",
+            ],
         )
 
         code = main(["--field", "1", "--delimiter", ":", str(file_path)])
@@ -63,9 +66,7 @@ class TestFieldMode:
         assert code == RETURN_CODES["SUCCESS"]
         assert out == ["a,c", "1,3", "5,7"]
 
-    def test_field_range(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
+    def test_field_range(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Extract range of fields."""
         file_path = write_lines(
             tmp_path,
@@ -150,9 +151,7 @@ class TestFieldMode:
 class TestCharMode:
     """Tests for -c (character extraction) mode."""
 
-    def test_single_character(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
+    def test_single_character(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Extract single character position."""
         file_path = write_lines(
             tmp_path,
@@ -182,9 +181,7 @@ class TestCharMode:
         assert code == RETURN_CODES["SUCCESS"]
         assert out == ["hlo", "wrd"]
 
-    def test_character_range(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
+    def test_character_range(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Extract range of character positions."""
         file_path = write_lines(
             tmp_path,
@@ -262,9 +259,7 @@ class TestStdinAndFiles:
         assert code == RETURN_CODES["SUCCESS"]
         assert out == ["b", "2"]
 
-    def test_multiple_files(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
+    def test_multiple_files(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Process multiple input files."""
         file1 = write_lines(tmp_path, "file1.txt", ["a\tb\tc", "1\t2\t3"])
         file2 = write_lines(tmp_path, "file2.txt", ["x\ty\tz", "7\t8\t9"])
@@ -293,9 +288,7 @@ class TestEdgeCases:
 
         assert code == RETURN_CODES["ERROR"]
 
-    def test_empty_file(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ):
+    def test_empty_file(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Empty file returns success with no output."""
         file_path = write_lines(tmp_path, "empty.txt", [])
 
