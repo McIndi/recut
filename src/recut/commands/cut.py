@@ -12,7 +12,11 @@ import logging
 import sys
 from typing import List
 
-from recut.core import create_file_based_parser, file_input_handler
+from recut.core import (
+    create_file_based_parser,
+    file_input_handler,
+    run_console_script,
+)
 
 RETURN_CODES = {
     "SUCCESS": 0,
@@ -215,5 +219,10 @@ def main(args: list[str] | None = None) -> int:  # noqa: C901
     return RETURN_CODES["SUCCESS"]
 
 
+def cli() -> int:
+    """Console-script entry point: set up stdio and SIGPIPE, then run main()."""
+    return run_console_script(main)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(cli())
