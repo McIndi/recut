@@ -445,3 +445,23 @@ def test_ascii_locale_arguments_match_input_bytes(
     """
     env = {"LC_ALL": "C", "PYTHONUTF8": "0"}
     _check_argv_case(installed_cli, tmp_path, env, b"\xc3\xa9", case)
+
+
+def test_cutty_empty_field_spec_is_clean_error(
+    installed_cli: dict[str, Path],
+) -> None:
+    """Regression (#11): -f '' exits 1 with a clean error, no traceback."""
+    result = run_cli(installed_cli["cutty"], ["-f", ""], input_text="a\tb\n")
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "field list is empty" in result.stderr
+
+
+def test_cutty_empty_character_spec_is_clean_error(
+    installed_cli: dict[str, Path],
+) -> None:
+    """Regression (#11): -c '' exits 1 with a clean error, no traceback."""
+    result = run_cli(installed_cli["cutty"], ["-c", ""], input_text="a\tb\n")
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "character list is empty" in result.stderr
