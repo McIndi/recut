@@ -1,3 +1,5 @@
+> Example / tutorial companion. Not maintained for production use.
+
 # Recut (REimagined Core Utils for Teaching)
 
 This repo contains a reimagining of common posix/linux commands written in Python to:
