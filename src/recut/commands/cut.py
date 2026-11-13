@@ -72,16 +72,22 @@ def create_parser():
     return parser
 
 
-def parse_field_spec(spec: str) -> tuple[List[int], bool]:
+def parse_field_spec(spec: str, *, what: str = "field list") -> tuple[List[int], bool]:
     """Parse a field spec such as '1,3,5-7' or '3-' into 1-based field indices.
 
     Returns (field_indices, has_open_ended_range).
+
+    An empty spec is rejected here: it is falsy, so it used to fall through
+    to the other mode's None and crash on ``None.split`` instead of failing
+    like any other invalid specification.
 
     Known limitation: an open-ended range ('N-') is only reliable as the
     whole spec. Mixed lists such as '1,3-' return early, so the fields between
     the listed numbers are selected too, and tokens after the open-ended range
     are not validated.
     """
+    if not spec:
+        raise ValueError(f"{what} is empty")
     fields: set[int] = set()
     parts = spec.split(",")
     has_open_ended = False
@@ -180,11 +186,13 @@ def main(args: list[str] | None = None) -> int:  # noqa: C901
 
     # Parse field or character specification
     try:
-        if parsed_args.field:
+        if parsed_args.field is not None:
             indices, open_ended = parse_field_spec(parsed_args.field)
             mode = "field"
         else:
-            indices, open_ended = parse_field_spec(parsed_args.characters)
+            indices, open_ended = parse_field_spec(
+                parsed_args.characters, what="character list"
+            )
             mode = "char"
     except ValueError as e:
         log.error("Invalid specification: %s", e)

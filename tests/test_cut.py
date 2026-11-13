@@ -300,13 +300,31 @@ class TestEdgeCases:
         assert out.strip() == ""
 
     def test_field_zero_is_error(self):
-        """Field numbering starts at 1; 0 is invalid."""
+        """Field numbering starts from 1; 0 is invalid."""
         code = main(["--field", "0", "dummy.txt"])
 
         assert code == RETURN_CODES["ERROR"]
 
+    def test_empty_field_spec_is_clean_error(self, caplog):
+        """An empty -f '' fails like other invalid specs, not a traceback (#11)."""
+        with caplog.at_level("ERROR"):
+            code = main(["--field", "", "dummy.txt"])
+
+        assert code == RETURN_CODES["ERROR"]
+        assert not any("Traceback" in r.message for r in caplog.records)
+        assert any("field list is empty" in r.message for r in caplog.records)
+
+    def test_empty_character_spec_is_clean_error(self, caplog):
+        """An empty -c '' fails like other invalid specs, not a traceback (#11)."""
+        with caplog.at_level("ERROR"):
+            code = main(["--characters", "", "dummy.txt"])
+
+        assert code == RETURN_CODES["ERROR"]
+        assert not any("Traceback" in r.message for r in caplog.records)
+        assert any("character list is empty" in r.message for r in caplog.records)
+
     def test_character_zero_is_error(self):
-        """Character numbering starts at 1; 0 is invalid."""
+        """Character numbering starts from 1; 0 is invalid."""
         code = main(["--characters", "0", "dummy.txt"])
 
         assert code == RETURN_CODES["ERROR"]
