@@ -180,10 +180,16 @@ def main(args: list[str] | None = None) -> int:  # noqa: C901
 
     # Parse field or character specification
     try:
-        if parsed_args.field:
+        if parsed_args.field is not None:
+            # An empty string is a provided (but invalid) spec, not a missing
+            # one — argparse counts -f '' as satisfying the required group
+            if not parsed_args.field.strip():
+                raise ValueError("field list is empty")
             indices, open_ended = parse_field_spec(parsed_args.field)
             mode = "field"
         else:
+            if not parsed_args.characters.strip():
+                raise ValueError("character list is empty")
             indices, open_ended = parse_field_spec(parsed_args.characters)
             mode = "char"
     except ValueError as e:

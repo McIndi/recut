@@ -1,3 +1,5 @@
+import logging
+
 import io
 from pathlib import Path
 
@@ -332,3 +334,31 @@ class TestEdgeCases:
 
         assert code == RETURN_CODES["SUCCESS"]
         assert out == ["b", "", "2"]
+
+
+class TestEmptySpecification:
+    """Empty -f/-c specs exit cleanly instead of crashing (#11)."""
+
+    def test_empty_field_spec_is_a_clean_error(self, caplog):
+        """-f '' is a provided (invalid) spec, not a missing one."""
+        with caplog.at_level(logging.ERROR):
+            code = main(["--field", ""])
+
+        assert code == RETURN_CODES["ERROR"]
+        assert "field list is empty" in caplog.text
+
+    def test_empty_character_spec_is_a_clean_error(self, caplog):
+        """-c '' is a provided (invalid) spec, not a missing one."""
+        with caplog.at_level(logging.ERROR):
+            code = main(["--characters", ""])
+
+        assert code == RETURN_CODES["ERROR"]
+        assert "character list is empty" in caplog.text
+
+    def test_whitespace_field_spec_is_a_clean_error(self, caplog):
+        """A whitespace-only spec is empty for the same reason."""
+        with caplog.at_level(logging.ERROR):
+            code = main(["--field", "   "])
+
+        assert code == RETURN_CODES["ERROR"]
+        assert "field list is empty" in caplog.text
